@@ -46,6 +46,53 @@ python3 -m disk_audit /media/$USER/DISQUE_001 \
 
 Les résultats sont écrits dans le dossier de sortie : `summary.html`, `files.csv`, `duplicates.csv`, `tree.csv` et `smart.json`.
 
+## Procédure Proxmox + Mac
+
+Si le disque USB est connecté au serveur Proxmox, identifiez-le sur Proxmox :
+
+```bash
+lsblk -o NAME,SIZE,FSTYPE,LABEL,MODEL,TRAN,MOUNTPOINTS
+```
+
+Repérez la partition dont `TRAN` vaut `usb`, puis montez-la en lecture seule. Exemple pour un disque `HDD2` sur `/dev/sdd1` :
+
+```bash
+mkdir -p /mnt/disque-usb
+mount -o ro,nosuid,nodev,noexec /dev/sdd1 /mnt/disque-usb
+```
+
+Lancez l'inventaire depuis Proxmox :
+
+```bash
+python3 -m disk_audit /mnt/disque-usb \
+  --device /dev/sdd --no-hash -o /root/rapports/HDD2
+```
+
+Copiez ensuite le rapport sur un Mac, dans un terminal macOS (et non dans le terminal `root@Proxmox`) :
+
+```bash
+scp -r root@ADRESSE_PROXMOX:/root/rapports/HDD2 ~/HDD2-rapport
+open ~/HDD2-rapport/summary.html
+```
+
+Après vérification du premier rapport, relancez l'analyse complète sans `--no-hash` pour détecter les doublons :
+
+```bash
+python3 -m disk_audit /mnt/disque-usb \
+  --device /dev/sdd -o /root/rapports/HDD2-complet
+```
+
+Répétez la procédure avec un dossier de sortie différent pour chaque disque (`HDD1`, `HDD2`, etc.). Ne montez jamais deux disques avec le même dossier de destination.
+
+### Ordre de travail conseillé
+
+1. Faire l'inventaire rapide avec `--no-hash`.
+2. Lire `summary.html` et repérer les erreurs d'accès.
+3. Vérifier les catégories `photo`, `pdf`, `word`, `excel` et `powerpoint` dans `files.csv`.
+4. Faire l'analyse complète avec les SHA-256.
+5. Copier les fichiers importants vers deux destinations distinctes.
+6. Ne supprimer ou reformater aucun disque avant vérification des copies.
+
 Le programme ne déplace, ne supprime et ne modifie aucun fichier source. Les fichiers illisibles apparaissent dans le rapport avec un risque élevé.
 
 ## Conseils de sécurité
