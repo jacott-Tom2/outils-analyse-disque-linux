@@ -46,6 +46,22 @@ python3 -m disk_audit /media/$USER/DISQUE_001 \
 
 Les résultats sont écrits dans le dossier de sortie : `summary.html`, `files.csv`, `duplicates.csv`, `tree.csv` et `smart.json`.
 
+## Application graphique locale
+
+Pour consulter le disque dans une interface web en lecture seule :
+
+```bash
+python3 -m disk_audit.webapp /mnt/disque-usb --port 8080
+```
+
+Le serveur écoute uniquement sur `127.0.0.1`. Depuis le Mac, ouvrez un second terminal et créez un tunnel SSH :
+
+```bash
+ssh -L 8080:127.0.0.1:8080 root@ADRESSE_PROXMOX
+```
+
+Puis ouvrez <http://127.0.0.1:8080>. L'application permet de parcourir les dossiers, rechercher des noms et prévisualiser les images, PDF et fichiers texte. Les macros Office et les fichiers exécutables ne sont pas lancés.
+
 ## Procédure Proxmox + Mac
 
 Si le disque USB est connecté au serveur Proxmox, identifiez-le sur Proxmox :
