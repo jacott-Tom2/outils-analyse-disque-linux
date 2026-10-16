@@ -63,10 +63,12 @@ def hash_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
-def scan(root: Path, output: Path, device: str | None, no_hash: bool) -> dict:
+def scan(root: Path, output: Path, device: str | None, no_hash: bool, hash_all: bool = False) -> dict:
     root = root.resolve()
     output.mkdir(parents=True, exist_ok=True)
     files, errors, hashes = [], [], defaultdict(list)
+    same_size = defaultdict(list)
+    scanned = 0
     for current, dirs, names in os.walk(root, followlinks=False):
         dirs[:] = [d for d in dirs if not (Path(current) / d).is_symlink()]
         for name in names:
@@ -78,12 +80,25 @@ def scan(root: Path, output: Path, device: str | None, no_hash: bool) -> dict:
                 item = {"path": rel, "name": name, "extension": path.suffix.lower(), "category": category,
                         "status": status, "size_bytes": stat.st_size,
                         "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()}
-                if not no_hash and stat.st_size > 0:
-                    item["sha256"] = hash_file(path)
-                    hashes[(stat.st_size, item["sha256"])].append(rel)
                 files.append(item)
+                if not no_hash and stat.st_size > 0:
+                    same_size[stat.st_size].append((path, item))
+                scanned += 1
+                if scanned % 1000 == 0:
+                    print(f"Inventaire : {scanned} fichiers", file=sys.stderr)
             except (OSError, PermissionError) as exc:
                 errors.append({"path": rel, "error": str(exc)})
+    hash_candidates = [pair for size, pairs in same_size.items() if hash_all or len(pairs) > 1 for pair in pairs]
+    if hash_candidates:
+        print(f"Empreintes SHA-256 : {len(hash_candidates)} fichiers candidats", file=sys.stderr)
+    for index, (path, item) in enumerate(hash_candidates, start=1):
+        try:
+            item["sha256"] = hash_file(path)
+            hashes[(item["size_bytes"], item["sha256"])].append(item["path"])
+        except (OSError, PermissionError) as exc:
+            errors.append({"path": item["path"], "error": str(exc)})
+        if index % 100 == 0:
+            print(f"Empreintes : {index}/{len(hash_candidates)}", file=sys.stderr)
     duplicates = [{"size_bytes": size, "sha256": digest, "paths": paths}
                   for (size, digest), paths in hashes.items() if len(paths) > 1]
     total = sum(item["size_bytes"] for item in files)
@@ -94,6 +109,7 @@ def scan(root: Path, output: Path, device: str | None, no_hash: bool) -> dict:
               "files": files, "errors": errors, "duplicates": duplicates,
               "categories": dict(categories), "total_bytes": total, "risk_count": risks,
               "capacity": {"total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free},
+              "hash_mode": "all" if hash_all else "same-size-only",
               "smart": smart_report(device)}
     write_reports(output, report)
     return report
@@ -132,10 +148,11 @@ def main() -> None:
     parser.add_argument("-o", "--output", type=Path, default=Path("rapport-disque"))
     parser.add_argument("--device", help="périphérique bloc, ex. /dev/sdb, pour SMART")
     parser.add_argument("--no-hash", action="store_true", help="ne pas calculer les SHA-256")
+    parser.add_argument("--hash-all", action="store_true", help="hacher tous les fichiers, y compris ceux dont la taille est unique")
     args = parser.parse_args()
     if not args.path.is_dir():
         parser.error(f"dossier introuvable : {args.path}")
-    report = scan(args.path, args.output, args.device, args.no_hash)
+    report = scan(args.path, args.output, args.device, args.no_hash, args.hash_all)
     print(f"Analyse terminée : {len(report['files'])} fichiers, {len(report['duplicates'])} groupes de doublons")
     print(f"Rapport HTML : {args.output / 'summary.html'}")
 

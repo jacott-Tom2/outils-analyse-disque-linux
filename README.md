@@ -46,6 +46,10 @@ python3 -m disk_audit /media/$USER/DISQUE_001 \
 
 Les résultats sont écrits dans le dossier de sortie : `summary.html`, `files.csv`, `duplicates.csv`, `tree.csv` et `smart.json`.
 
+Le mode normal optimise le hachage : seuls les fichiers ayant une taille partagée avec au moins un autre fichier sont hachés. Utilisez `--hash-all` pour une vérification exhaustive.
+
+Voir [optimisation et automatisation](docs/optimisation-automatisation.md) pour le script de lancement sécurisé.
+
 ## Application graphique locale
 
 Pour consulter le disque dans une interface web en lecture seule :
