@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import shutil
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -88,9 +89,11 @@ def scan(root: Path, output: Path, device: str | None, no_hash: bool) -> dict:
     total = sum(item["size_bytes"] for item in files)
     categories = Counter(item["category"] for item in files)
     risks = len(errors) + sum(item["category"] == "systeme_probable" for item in files)
+    usage = shutil.disk_usage(root)
     report = {"generated_at": datetime.now(timezone.utc).isoformat(), "root": str(root),
               "files": files, "errors": errors, "duplicates": duplicates,
               "categories": dict(categories), "total_bytes": total, "risk_count": risks,
+              "capacity": {"total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free},
               "smart": smart_report(device)}
     write_reports(output, report)
     return report
@@ -111,9 +114,11 @@ def write_reports(output: Path, report: dict) -> None:
     rows = "".join(f"<tr><td>{html.escape(str(k))}</td><td>{v:,}</td></tr>" for k, v in sorted(report["categories"].items()))
     duplicate_rows = "".join(f"<tr><td>{d['size_bytes']:,}</td><td><code>{d['sha256']}</code></td><td>{html.escape(' | '.join(d['paths']))}</td></tr>" for d in report["duplicates"])
     error_rows = "".join(f"<li>{html.escape(e['path'])}: {html.escape(e['error'])}</li>" for e in report["errors"])
+    capacity = report["capacity"]
     page = f"""<!doctype html><meta charset='utf-8'><title>Rapport {html.escape(report['root'])}</title>
 <style>body{{font:16px sans-serif;max-width:1100px;margin:2em auto}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #ccc;padding:.4em;text-align:left}}.risk{{color:#a00}}</style>
 <h1>Rapport d'analyse</h1><p><b>Source :</b> {html.escape(report['root'])}</p><p><b>Fichiers :</b> {len(report['files']):,} — <b>Volume :</b> {report['total_bytes']:,} octets — <b>Risque :</b> <span class='risk'>{report['risk_count']}</span></p>
+<p><b>Capacité du système de fichiers :</b> {capacity['total_bytes']:,} octets — <b>utilisés :</b> {capacity['used_bytes']:,} — <b>libres :</b> {capacity['free_bytes']:,}</p>
 <h2>Catégories</h2><table><tr><th>Catégorie</th><th>Nombre</th></tr>{rows}</table>
 <h2>Doublons ({len(report['duplicates'])})</h2><table><tr><th>Taille</th><th>SHA-256</th><th>Fichiers</th></tr>{duplicate_rows}</table>
 <h2>Erreurs d'accès ({len(report['errors'])})</h2><ul>{error_rows or '<li>Aucune</li>'}</ul>
